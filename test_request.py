@@ -20,7 +20,6 @@ payload = {
 
 response = requests.post("http://localhost:5000/command" , json=payload)
 
-    
 zip_file = zipfile.ZipFile(io.BytesIO(response.content))
 
 response_json = zip_file.read("response.json")
