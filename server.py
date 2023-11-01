@@ -25,7 +25,7 @@ class CommandRunner(object):
 
         zip_buffer = io.BytesIO()
         
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as self.zip_file:
             try:
                 for command_object in commands:
                     result = self.run_command(command_object)
@@ -38,7 +38,7 @@ class CommandRunner(object):
             response_as_json = json.dumps(response).encode("utf-8")
             response_buffer.write(response_as_json)
             response_buffer.seek(0)
-            zip_file.writestr("response.json", response_buffer.getvalue())
+            self.zip_file.writestr("response.json", response_buffer.getvalue())
 
         zip_buffer.seek(0)
         return zip_buffer
@@ -63,9 +63,9 @@ class CommandRunner(object):
 
                 if "file" in result:
                     filedata = result["file"]
-                    filename = str(file_count) + ".png"
+                    filename = str(self.file_count) + ".png"
                     self.zip_file.writestr(filename, filedata.getvalue())
-                    file_count +=1
+                    self.file_count +=1
                     result["file"] = filename
                 return result
         raise Exception("Unrecognised command!")
@@ -87,8 +87,10 @@ def mouse_move(dx, dy): ## TODO broken and can not cross monitor boundaries
 
 @command_runner.register_command
 def focus(window_name):
-    if not set_focus_to(window_name):
+    window = get_window(window_name)
+    if window is None:
         raise Exception("Unable to focus " + window_name)
+    window.set_focus()
     
 @command_runner.register_command
 def wait_ms(milliseconds_to_wait):
@@ -96,9 +98,13 @@ def wait_ms(milliseconds_to_wait):
 
 @command_runner.register_command
 def screenshot(window_name):
-    image_as_bytes = take_screenshot(window_name)
-    if (image_as_bytes is None):
-        raise Exception("Unable to take screenshot of " + window_name)
+    window = get_window(window_name)
+    if window is None:
+        raise Exception("Unable to take screenshot of " + window_name)   
+    image = window.capture_as_image()
+    image_as_bytes = io.BytesIO()
+    image.save(image_as_bytes, 'PNG')
+    image_as_bytes.seek(0)        
     return { "file" : image_as_bytes }
 
 @functools.cache
@@ -106,24 +112,7 @@ def get_window(window_name):
     windows = pywinauto.Desktop().windows() ## TODO cache?
     for window in windows:
         if window_name.lower() in window.window_text().lower():
-            return window
-
-def set_focus_to(window_name):
-    window = get_window(window_name)
-    if window is None:
-        return False
-    window.set_focus()
-    return True
-
-def take_screenshot(window_name):
-    window = get_window(window_name)
-    if window is None:
-        return None
-    image = window.capture_as_image()
-    image_io = io.BytesIO()
-    image.save(image_io, 'PNG')
-    image_io.seek(0)
-    return image_io
+            return window  
 
 @app.route("/command", methods=["POST"])
 def command():
